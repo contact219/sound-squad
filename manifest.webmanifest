@@ -1,0 +1,14 @@
+{
+  "name": "Sound Squad",
+  "short_name": "Sound Squad",
+  "description": "Reading practice for kids with dyslexia, built like cheer practice.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fbf5e6",
+  "theme_color": "#2b2d6e",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
