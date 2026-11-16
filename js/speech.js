@@ -24,6 +24,7 @@ export function stop() {
   speakToken++;
   synth?.cancel();
   if (currentAudio) { currentAudio.pause(); currentAudio = null; }
+  document.querySelectorAll('.video-bubble video').forEach(v => { v.pause(); v.dispatchEvent(new Event('ended')); });
 }
 
 // Speak text; resolves when finished (with a time-based fallback, since some browsers skip "end").
@@ -89,11 +90,35 @@ export async function playBlob(blob) {
   return token === speakToken;
 }
 
-// Say a sound tile: the grown-up's recording if there is one, otherwise "letters, as in keyword".
+// Say a sound tile: the grown-up's video or voice recording if there is one, otherwise "letters, as in keyword".
 export async function sayTile(tile) {
+  const video = await getClip(`video:sound:${tile.key}`);
+  if (video) return playVideoBubble(video);
   const clip = await getClip(`sound:${tile.key}`);
   if (clip) return playBlob(clip);
   return say(tileText(tile));
+}
+
+// Play a video clip in a small floating bubble (e.g. a grown-up's mouth making a sound).
+export async function playVideoBubble(blob, { big = false } = {}) {
+  const token = ++speakToken;
+  synth?.cancel();
+  document.querySelectorAll('.video-bubble').forEach(b => b.remove());
+  const box = document.createElement('div');
+  box.className = 'video-bubble' + (big ? ' big' : '');
+  const v = document.createElement('video');
+  v.playsInline = true;
+  v.src = URL.createObjectURL(blob);
+  box.appendChild(v);
+  document.body.appendChild(box);
+  await new Promise(resolve => {
+    v.onended = v.onerror = resolve;
+    box.onclick = resolve;
+    v.play().catch(resolve);
+  });
+  URL.revokeObjectURL(v.src);
+  box.remove();
+  return token === speakToken;
 }
 export function tileText(tile) {
   if (tile.silent) return 'silent e';
@@ -102,8 +127,13 @@ export function tileText(tile) {
   return `${spellOut(tile.label)}, as in ${s[0]}`;
 }
 
-export async function record() {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+// Start recording. Returns a stop() function that resolves with the Blob.
+// With { video: <video element> } it records the front camera too and shows a live preview.
+export async function record({ video } = {}) {
+  const stream = await navigator.mediaDevices.getUserMedia(video
+    ? { audio: true, video: { facingMode: 'user', width: { ideal: 480 }, height: { ideal: 480 } } }
+    : { audio: true });
+  if (video) { video.srcObject = stream; video.muted = true; video.playsInline = true; video.play().catch(() => {}); }
   const rec = new MediaRecorder(stream);
   const chunks = [];
   rec.ondataavailable = e => chunks.push(e.data);
@@ -111,7 +141,8 @@ export async function record() {
   return () => new Promise(resolve => {
     rec.onstop = () => {
       stream.getTracks().forEach(t => t.stop());
-      resolve(new Blob(chunks, { type: rec.mimeType || 'audio/webm' }));
+      if (video) video.srcObject = null;
+      resolve(new Blob(chunks, { type: rec.mimeType || (video ? 'video/webm' : 'audio/webm') }));
     };
     rec.stop();
   });
@@ -145,6 +176,23 @@ export function listen(onText) {
   };
   try { start(); } catch { return () => {}; }
   return () => { stopped = true; try { rec.stop(); } catch { /* ignore */ } };
+}
+
+// Listen for one spoken sentence. Resolves with the text ('' if nothing was heard).
+export function listenOnce({ timeout = 12000 } = {}) {
+  return new Promise(resolve => {
+    if (!SR) return resolve('');
+    const rec = new SR();
+    rec.lang = 'en-US';
+    rec.interimResults = false;
+    rec.continuous = false;
+    let text = '';
+    const t = setTimeout(() => { try { rec.stop(); } catch { /* ignore */ } }, timeout);
+    rec.onresult = e => { text = [...e.results].map(r => r[0].transcript).join(' '); };
+    rec.onend = () => { clearTimeout(t); resolve(text.trim()); };
+    rec.onerror = () => {};
+    try { rec.start(); } catch { clearTimeout(t); resolve(''); }
+  });
 }
 
 // ---------- Sound effects (made with WebAudio, no files) ----------

@@ -1,6 +1,6 @@
 // Read & Cheer — phrase-scooped stories: Listen, Echo, Read it myself (timed), then questions.
 import { PASSAGES } from './data.js';
-import { say, stop, sfx, listen, recognitionSupported } from './speech.js';
+import { say, stop, sfx, listen, recognitionSupported, record, putClip } from './speech.js';
 import { esc, waitClick, wiggle, sleep, pick, shuffle, PRAISE, ENCOURAGE, confetti } from './ui.js';
 import { save } from './store.js';
 
@@ -50,7 +50,7 @@ async function picker(ctx) {
 
 export async function run(ctx) {
   const { root, profile, level } = ctx;
-  const passage = ctx.choose ? await picker(ctx) : (PASSAGES.find(p => p.level === level) || PASSAGES[0]);
+  const passage = ctx.passage || (ctx.choose ? await picker(ctx) : (PASSAGES.find(p => p.level === level) || PASSAGES[0]));
   if (!ctx.alive() || !passage) return null;
 
   const phrases = passage.text.split('/').map(s => s.trim()).filter(Boolean);
@@ -85,7 +85,8 @@ export async function run(ctx) {
   let helped = new Set();
   let solo = null;
   let stopMic = () => {};
-  ctx.onExit(() => { token++; stopMic(); });
+  let stopRec = null;
+  ctx.onExit(() => { token++; stopMic(); stopRec?.(); });
 
   const nextUp = m => root.querySelectorAll('[data-mode]').forEach(b => b.classList.toggle('next-up', b.dataset.mode === m));
   const clearHl = () => phraseEls.forEach(p => p.classList.remove('hl', 'your-turn'));
@@ -147,9 +148,16 @@ export async function run(ctx) {
     helped = new Set();
     wordEls.forEach(w => w.classList.remove('helped', 'missed', 'heard'));
     status.innerHTML = `Read the whole story out loud. Tap a word if you get stuck.${useMic ? ' Words light up as I hear them!' : ''}`;
-    sub.innerHTML = '<button class="btn primary big" data-go>Start reading</button>';
+    sub.innerHTML = `<label class="check rec-toggle"><input type="checkbox" data-rec ${profile.settings.recordReading ? 'checked' : ''}> 🎙️ Save a recording of my reading</label>
+      <button class="btn primary big" data-go>Start reading</button>`;
     await waitClick(sub, '[data-go]');
     if (my !== token) return;
+    const wantRec = sub.querySelector('[data-rec]').checked;
+    if (wantRec !== profile.settings.recordReading) { profile.settings.recordReading = wantRec; save(); }
+    stopRec = null;
+    if (wantRec) {
+      try { stopRec = await record(); } catch { status.textContent = 'The microphone isn’t available, so no recording this time.'; }
+    }
     mode = 'solo';
     let heard = new Set();
     if (useMic) {
@@ -165,6 +173,8 @@ export async function run(ctx) {
     await waitClick(sub, '[data-done]');
     clearInterval(tick);
     stopMic();
+    const recBlob = stopRec ? await stopRec() : null;
+    stopRec = null;
     if (my !== token) return;
     const secs = Math.max(5, (performance.now() - t0) / 1000);
     mode = 'review';
@@ -182,6 +192,13 @@ export async function run(ctx) {
     solo = { wcpm, accuracy, secs: Math.round(secs) };
     profile.readHistory = profile.readHistory || {};
     profile.readHistory[passage.id] = [...history, { t: Date.now(), wcpm, accuracy }];
+    if (recBlob) {
+      const t = Date.now();
+      try {
+        await putClip(`reading:${t}`, recBlob);
+        profile.readings.push({ t, pid: passage.id, title: passage.title, wcpm, accuracy, key: `reading:${t}` });
+      } catch { /* storage full or unavailable */ }
+    }
     save();
     sfx('up');
     let msg = `${wcpm} words correct per minute!`;
@@ -236,7 +253,7 @@ export async function run(ctx) {
     }
     return {
       items: qs.length, correct, metric: solo ? solo.wcpm : null, unit: 'words correct per minute',
-      details: { pid: passage.id, title: passage.title, accuracy: solo?.accuracy, secs: solo?.secs },
+      details: { pid: passage.id, title: passage.title, accuracy: solo?.accuracy, secs: solo?.secs, level: passage.level },
     };
   }
 

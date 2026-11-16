@@ -258,13 +258,161 @@ export const STUNT_BREAKS = [
   'Make a T with your arms and hold it for 8 counts.', 'Wiggle like a noodle for 8 counts!',
 ];
 
+// ---------- Turning plain words into sound tiles (for grown-up word lists) ----------
+const GRAPHEMES = ['tch', 'eer', 'ing', 'sh', 'ch', 'th', 'ck', 'ng', 'll', 'ss', 'ff', 'ai', 'ay', 'ee', 'ea', 'oa', 'ow', 'ou', 'oi', 'oy', 'oo', 'ar', 'or', 'er', 'ir', 'ur', 'qu'];
+export function autoSpec(raw) {
+  const w = raw.toLowerCase().replace(/[^a-z]/g, '');
+  if (!w) return null;
+  const tiles = [];
+  for (let i = 0; i < w.length;) {
+    const g = GRAPHEMES.find(x => w.startsWith(x, i)) || w[i];
+    tiles.push(g);
+    i += g.length;
+  }
+  const n = tiles.length;
+  const isV = t => VOWELS.has(t);
+  if (n >= 3 && tiles[n - 1] === 'e' && !isV(tiles[n - 2]) && isV(tiles[n - 3])) tiles[n - 1] = 'e*';
+  if (n >= 3 && tiles[n - 1] === 'y' && !isV(tiles[n - 2]) && tiles.slice(0, -1).some(isV)) tiles[n - 1] = 'y(ee)';
+  return tiles.join('-');
+}
+
+const LITTLE = new Set('a an the to of in on at by for with and but or so my your his her their our its from into as'.split(' '));
+export function chunkPhrases(text) {
+  const parts = text.replace(/\s+/g, ' ').trim().split(/(?<=[.,!?;:])\s+/);
+  const out = [];
+  for (const part of parts) {
+    const words = part.split(' ').filter(Boolean);
+    // Split long parts into scoops of 3–5 words.
+    const n = Math.max(1, Math.round(words.length / 4));
+    const size = Math.ceil(words.length / n);
+    const chunks = [];
+    for (let i = 0; i < words.length; i += size) chunks.push(words.slice(i, i + size));
+    // Don't end a scoop on a little word ("the", "to", "a"…): move it to the next scoop.
+    for (let c = 0; c < chunks.length - 1; c++) {
+      while (chunks[c].length > 1 && LITTLE.has(chunks[c][chunks[c].length - 1].toLowerCase())) chunks[c + 1].unshift(chunks[c].pop());
+    }
+    out.push(...chunks.map(ch => ch.join(' ')));
+  }
+  return out.join(' / ');
+}
+
+// All sounds, grouped (for the voice recorder and the sound map).
+export const SOUND_GROUPS = [
+  ['Short vowels', 'a e i o u'], ['Long vowels (magic e)', 'A I O U'], ['Consonants', 'b c d f g h j k l m n p r s t v w y z'],
+  ['Sound teams', 'sh ch th ck ng'], ['Vowel teams', 'ai ay ee ea oa ow(oh) ow ou oi oy oo oo(u)'],
+  ['Bossy r', 'ar or er ir ur eer'], ['Tricky sounds', 'g(j) c(s) y(ee) ed(d) ed(t) ing'],
+].map(([name, keys]) => ({ name, keys: keys.split(' ') }));
+export const keyLabel = k => (k.length === 1 && k === k.toUpperCase() ? `${k.toLowerCase()}_e` : k.replace(/\(.*\)/, ''));
+
+// ---------- Cheer Names: made-up words and syllables ----------
+const split = s => s.split(' ');
+export const DECODE_LEVELS = [
+  { name: 'Short-vowel made-up words', on: split('b d f g h j k l m n p r s t v w z'), v: split('a e i o u'), co: split('b d g m n p t') },
+  { name: 'Blends and teams', on: split('sh ch th bl cl fl gl pl sl br cr dr fr gr pr tr sk sm sn sp st sw'), v: split('a e i o u'), co: split('sh ch th ck mp nd nt st sk') },
+  { name: 'Magic-e made-up words', on: split('b d f g j k l m n p r t v z bl fl gr pl sl st tr'), v: split('a i o u'), co: split('b d k m n p t v z'), e: true },
+  { name: 'Vowel-team made-up words', on: split('b d f g j k l m n p r s t z bl gr pl st'), v: split('ai ee oa oo oi ou ar or ir'), co: split('t d m n p sh k') },
+  { name: 'Clap the syllables', syllables: true },
+  { name: 'Two-part made-up words', on: split('b d f g l m n p r s t v z bl pl st'), v: split('a e i o u'), co: split('b d g m n p t'), two: true },
+];
+export const SYLLABLE_WORDS = split('rab|bit nap|kin sun|set mag|net ro|bot mu|sic pic|nic cac|tus fan|tas|tic gym|nas|tics cham|pi|on ac|ro|bat el|e|phant cel|e|brate com|pe|ti|tion cheer|lead|er pyr|a|mid ta|ble but|ter|fly ba|nan|a hip|po|pot|a|mus ad|ven|ture') ;
+const REAL = new Set(split('bad bag bed beg big bin bit bob bud bug bun bus but cab can cap cat cod cop cot cub cup cut dad den dig dim dip dog dot dub dug fan fat fed fib fig fin fit fog fun gab gap gas get gig gob god got gum gun gut had ham hat hem hen hid him hip his hit hog hop hot hub hug hum hut jab jam jet jig job jog jot jug jut kid kin kit lab lad lag lap led leg let lid lip lit log lot lug mad man map mat men met mid mob mom mop mud mug nab nag nap net nip nod not nub nun nut pad pan pat peg pen pep pet pig pin pit pod pop pot pub pun pup put rag ram ran rap rat red rib rid rig rim rip rob rod rot rub rug run rut sad sag sap sat set sib sip sit sob sod sub sum sun tab tag tan tap ted ten tin tip top tot tub tug tun vat vet wag web wed wet wig win wit wot zap zen zip bake bike bite bone cake cape cone cube cute dime dine dome dune fade fame fine game gate gave hide hike home hope joke kite lake lame lane late like lime line made make male mane mate mile mine mole mope mule name nine note pale pane pine pipe pole pope rake ride ripe robe rode rope rose rude rule take tale tame tape time tone tube tune vane vine vote wake wide wine wipe zone bait boat boot coat food feet foot goat heat hood keep main meet mood moon nail need park part pain road seed soap soup tail team toad tool weed wait card cart dark dart farm fork form fort harm horn torn turn bird dirt firm loud mouth shout oink coin join soil boil foil'));
+
+split('sam tom dan ben pam tim jim kim ron meg peg jen ken len tad ted ned bev deb jan nan val zed liz pat rod jon gus bud mel mat tab pug pun dun gem gel gum mum fen fez hug jut lug mob nod pad rum sum tug vim wad yam zag zig dib mib').forEach(w => REAL.add(w));
+const BLOCK = /(fuk|fuc|fuck|shit|cum|tit|fag|sex|pis|nig|cok|dik|dic|kok|rape|pube|lube|nude|poop|butt|dam|bum|wee|pee|gag|slut|crap|piss|ass)/;
+const okNonsense = w => !REAL.has(w) && !BLOCK.test(w);
+
+export function nonsenseWord(level) {
+  const L = DECODE_LEVELS[level - 1];
+  const p = a => a[Math.floor(Math.random() * a.length)];
+  for (let i = 0; i < 80; i++) {
+    let w;
+    if (L.two) w = p(L.on) + p(L.v) + p(L.co) + p(['b', 'd', 'l', 'm', 'n', 'p', 't', 'r']) + p(L.v) + p(L.co);
+    else w = p(L.on) + p(L.v) + p(L.co) + (L.e ? 'e' : '');
+    if (okNonsense(w)) return w;
+  }
+  return 'zib';
+}
+// A look-alike made-up word: change the vowel, or flip a look-alike letter.
+export function nonsenseVariant(w, level) {
+  const L = DECODE_LEVELS[level - 1];
+  const flips = { b: 'd', d: 'b', p: 'q', m: 'n', n: 'm', t: 'f', g: 'j', s: 'z' };
+  for (let i = 0; i < 40; i++) {
+    let out = w;
+    if (Math.random() < 0.55) {
+      const vs = (L.v || ['a', 'e', 'i', 'o', 'u']).filter(v => w.includes(v));
+      const from = vs[Math.floor(Math.random() * vs.length)];
+      const to = (L.v || ['a', 'e', 'i', 'o', 'u']).filter(v => v !== from && v.length === from?.length);
+      if (from && to.length) out = w.replace(from, to[Math.floor(Math.random() * to.length)]);
+    } else {
+      const idx = [...w].findIndex(c => flips[c]);
+      if (idx >= 0) out = w.slice(0, idx) + flips[w[idx]] + w.slice(idx + 1);
+    }
+    if (out !== w && okNonsense(out) && !out.includes('q')) return out;
+  }
+  return w.split('').reverse().join('');
+}
+
+// ---------- Sentence Builder ----------
+export const WRITE_LEVELS = [
+  { name: 'Fill-in sentences' }, { name: 'My own sentences' }, { name: 'Joining words (and, but, because, so)' },
+];
+export const SENTENCE_FRAMES = [
+  { frame: 'I like to ___.', bank: ['jump', 'flip', 'cheer', 'read', 'swim', 'dance'] },
+  { frame: 'My team can ___.', bank: ['clap', 'stomp', 'cheer', 'win', 'spin', 'jump'] },
+  { frame: 'The cat sat on the ___.', bank: ['mat', 'bed', 'rug', 'log', 'box'] },
+  { frame: 'I am ___ today.', bank: ['happy', 'tired', 'proud', 'silly', 'brave'] },
+  { frame: 'We went to the ___.', bank: ['park', 'gym', 'store', 'lake', 'zoo'] },
+  { frame: 'My favorite food is ___.', bank: ['pizza', 'tacos', 'apples', 'pasta', 'soup'] },
+  { frame: 'Can you see the ___?', bank: ['dog', 'moon', 'bird', 'ship', 'star'] },
+  { frame: 'The ___ is big.', bank: ['tree', 'truck', 'whale', 'house', 'cake'] },
+];
+export const WRITE_PROMPTS = [
+  { q: 'Tell me about your favorite cheer stunt.', bank: ['jump', 'flip', 'team', 'high', 'land', 'spot', 'fun'] },
+  { q: 'What did you do today?', bank: ['went', 'played', 'read', 'ate', 'saw', 'then', 'with'] },
+  { q: 'Tell me about someone in your family.', bank: ['my', 'grandma', 'brother', 'sister', 'loves', 'funny', 'kind'] },
+  { q: 'What is your favorite animal, and why?', bank: ['dog', 'cat', 'horse', 'like', 'because', 'soft', 'fast'] },
+  { q: 'What would you do on a snow day?', bank: ['snow', 'build', 'sled', 'cocoa', 'cold', 'play', 'outside'] },
+  { q: 'Tell me about a time you felt proud.', bank: ['proud', 'when', 'I', 'won', 'tried', 'hard', 'learned'] },
+];
+export const JOINERS = ['and', 'but', 'because', 'so'];
+
+// ---------- Math Squad ----------
+export const MATH_LEVELS = [
+  { name: 'Clocks and adding to 10', types: ['clock1', 'word10'] },
+  { name: 'Word problems to 20', types: ['word20', 'clock2'] },
+  { name: 'Adding with carrying', types: ['carry', 'word20'] },
+  { name: 'Subtracting with borrowing', types: ['borrow', 'carry'] },
+  { name: 'Bigger word problems', types: ['word100', 'clock2', 'borrow'] },
+  { name: 'Coins and 5-minute clocks', types: ['coins', 'clock3', 'word100'] },
+];
+
+// ---------- Monthly checkpoint (fixed lists so results compare month to month) ----------
+export const CHECKPOINT = {
+  sounds: split('m s t a p f i n o c d u g b e h r l k j w v y z x q sh ch th ck ai ee oa oo ou ar or er'),
+  words: split('the cat and sit red was hop she bus fish said jump they ship frog made cake rain look could bird park play boat snow chin tree thank would horse farm coin toy out under garden rabbit after every smile because friend kitchen morning answer thought picture bright careful different family important together surprise mountain whistle question beautiful imagine celebrate enormous'),
+  nonwords: split('ib af ot mip tup sed lom fep bim hud nop zag wib dut chab shem thop frim blug stap crod glet drib spum plab nast rimp folt gake bime tope mune jate kife roat seap meed doam soip chout narf borf tirk shurn plaim frool bloy splim strob zibnap temrop gundlet fosper plimtor rendapt'),
+  spelling: [
+    ['hop', 'The bunny can hop.'], ['ship', 'The ship sails on the sea.'], ['frog', 'A frog sat on a log.'],
+    ['cake', 'We ate birthday cake.'], ['rain', 'The rain is falling.'], ['park', 'We play at the park.'],
+    ['coin', 'I found a shiny coin.'], ['jumping', 'She is jumping on the mat.'], ['rabbit', 'The rabbit has long ears.'],
+    ['sunshine', 'The sunshine feels warm.'],
+  ],
+  passage: {
+    id: 'checkpoint', level: 0, title: 'Practice Day',
+    text: 'On Saturday, / the squad met at the gym / for practice. / Coach Rosa / blew her whistle / and everyone lined up. / First they stretched / their arms and legs. / Next they practiced / their jumps / until they were sharp / and high. / Then it was time / for the new stunt. / Lily was nervous, / but her friends / held her steady. / When she landed it, / the whole team / cheered so loud / that the windows shook. / After practice, / they shared oranges / and talked about / the big show / next month.',
+    questions: [],
+  },
+};
+
 export const LEVEL_COUNTS = {
   ran: RAN_LEVELS.length, letters: TWIN_LEVELS.length, phon: PHON_LEVELS.length,
   spell: SPELL_LEVELS.length, memory: MEMORY_LEVELS.length, fluency: Math.max(...PASSAGES.map(p => p.level)),
+  decode: DECODE_LEVELS.length, write: WRITE_LEVELS.length, math: MATH_LEVELS.length,
 };
 
 export const LEVEL_NAME = {
   ran: l => RAN_LEVELS[l - 1]?.name, letters: l => TWIN_LEVELS[l - 1]?.name, phon: l => PHON_LEVELS[l - 1]?.name,
   spell: l => SPELL_LEVELS[l - 1]?.name, memory: l => MEMORY_LEVELS[l - 1]?.name,
   fluency: l => PASSAGES.find(p => p.level === l)?.title,
+  decode: l => DECODE_LEVELS[l - 1]?.name, write: l => WRITE_LEVELS[l - 1]?.name, math: l => MATH_LEVELS[l - 1]?.name,
 };

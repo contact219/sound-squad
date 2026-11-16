@@ -9,9 +9,14 @@ import * as phon from './act-phon.js';
 import * as spell from './act-spell.js';
 import * as memory from './act-memory.js';
 import * as fluency from './act-read.js';
+import * as decode from './act-decode.js';
+import * as write from './act-write.js';
+import * as math from './act-math.js';
 import { coach } from './coach.js';
+import { checkpoint, checkpointDue } from './checkpoint.js';
+import { getPage } from './read-anything.js';
 
-const ACTS = { ran, letters, phon, spell, memory, fluency };
+const ACTS = { ran, letters, phon, spell, memory, fluency, decode, write, math };
 const app = $('#app');
 const COLORS = ['#e2366b', '#7a3ff2', '#2b8bd8', '#2aa36b', '#f5b400', '#ff7a1a'];
 const FONTS = {
@@ -86,15 +91,21 @@ function badges(p) {
     ['⭐', '100 spirit points', p.stars >= 100], ['🌟', '500 spirit points', p.stars >= 500],
     ['📣', '10 mastered words', p.mastered.length >= 10], ['⚡', 'Speed star', Object.keys(p.best).some(k => k.startsWith('ran') && p.best[k] >= 50)],
     ['📚', '5 stories read', reads >= 5], ['🚀', 'Level up!', levelUps],
+    ['✏️', '10 sentences written', p.journal.length >= 10], ['📏', 'First checkpoint', p.checkpoints.length >= 1],
+    ['📈', 'Beat a checkpoint', p.checkpoints.length >= 2 && p.checkpoints.at(-1).words.rate > p.checkpoints.at(-2).words.rate],
   ];
 }
 
+// A three-day rotation so every skill gets practice, with sound work and reading every day.
 function routinePlan(p) {
-  const prevDays = p.days.filter(d => d !== S.today()).length;
-  const odd = prevDays % 2 === 1;
-  let plan = p.settings.routine === 'short'
-    ? ['phon', 'spell', 'break', 'fluency']
-    : ['ran', 'phon', 'break', 'spell', odd ? 'memory' : 'letters', 'break', 'fluency'];
+  const d = p.days.filter(x => x !== S.today()).length % 3;
+  const regular = [
+    ['ran', 'phon', 'break', 'spell', 'letters', 'break', 'fluency'],
+    ['phon', 'decode', 'break', 'spell', 'memory', 'break', 'fluency'],
+    ['ran', 'phon', 'break', 'write', 'math', 'break', 'fluency'],
+  ][d];
+  const short = [['phon', 'spell', 'break', 'fluency'], ['phon', 'decode', 'break', 'fluency'], ['phon', 'write', 'break', 'fluency']][d];
+  let plan = p.settings.routine === 'short' ? short : regular;
   if (!p.settings.breaks) plan = plan.filter(s => s !== 'break');
   return plan;
 }
@@ -127,6 +138,11 @@ export function home() {
         <button class="btn primary big" data-routine>${doneToday ? 'Go again' : 'Let’s go!'} ▶</button>
       </section>
 
+      ${checkpointDue(p) ? `<section class="card banner">
+        <div><b>📏 ${p.checkpoints.length ? 'Monthly checkpoint is due' : 'Start with a checkpoint'}</b>
+        <p class="small muted">${p.checkpoints.length ? 'A 10-minute check with a grown-up, to see how much has grown.' : 'A 10-minute check with a grown-up. It’s the starting line, so you can see growth later.'}</p></div>
+        <button class="btn" data-checkpoint>Grown-up: start</button></section>` : ''}
+
       <section class="tiles">
         ${SKILLS.map(k => `
           <button class="tile-act" data-act="${k}" style="--c:${SKILL_INFO[k].color}">
@@ -135,6 +151,11 @@ export function home() {
             <span class="small">${esc(SKILL_INFO[k].kid)}</span>
             <span class="lvl">Level ${p.levels[k]} · ${esc(LEVEL_NAME[k](p.levels[k]) || '')}</span>
           </button>`).join('')}
+        <button class="tile-act" data-scan style="--c:#334155">
+          <span class="emoji">📷</span><b>Read Anything</b>
+          <span class="small">Snap a page and I’ll read it to you.</span>
+          <span class="lvl">Worksheets, books, signs</span>
+        </button>
       </section>
 
       <section class="card trophies">
@@ -146,7 +167,23 @@ export function home() {
   $('[data-routine]', app).onclick = routine;
   app.querySelectorAll('[data-act]').forEach(b => { b.onclick = () => freePlay(b.dataset.act); });
   $('[data-switch]', app)?.addEventListener('click', switchProfile);
-  holdButton($('[data-coach]', app), () => coach(app, { onClose: home, onAddReader: () => setup({ first: false }), applySettings }));
+  $('[data-checkpoint]', app)?.addEventListener('click', () => checkpoint(app, { onDone: home }));
+  $('[data-scan]', app).onclick = readAnything;
+  holdButton($('[data-coach]', app), openCoach);
+}
+
+function openCoach() {
+  coach(app, {
+    onClose: home, onAddReader: () => setup({ first: false }), applySettings,
+    onCheckpoint: () => checkpoint(app, { onDone: openCoach }),
+  });
+}
+
+async function readAnything() {
+  const res = await runActivity('fluency', { title: '📷 Read Anything', getPassage: getPage });
+  if (!res) return home();
+  if (res.metric != null) S.recordSession('fluency', res);
+  home();
 }
 
 function holdButton(btn, fn) {
@@ -175,7 +212,7 @@ function switchProfile() {
 // ---------- Running activities ----------
 let current = null;
 
-function runActivity(skill, { step, total, choose } = {}) {
+function runActivity(skill, { step, total, choose, title, getPassage } = {}) {
   stop();
   const p = S.profile();
   const info = SKILL_INFO[skill];
@@ -184,22 +221,29 @@ function runActivity(skill, { step, total, choose } = {}) {
     <div class="act-shell" style="--c:${info.color}">
       <header class="bar">
         <button class="exit" data-exit aria-label="Stop and go home">✕</button>
-        <h1>${info.emoji} ${esc(info.title)}</h1>
-        <span class="lvl">${step ? `Step ${step} of ${total} · ` : ''}Level ${lvl}</span>
+        <h1>${title ? esc(title) : `${info.emoji} ${esc(info.title)}`}</h1>
+        <span class="lvl">${step ? `Step ${step} of ${total} · ` : ''}${title ? '' : `Level ${lvl}`}</span>
       </header>
       <main class="act-body"></main>
     </div>`;
   const c = { dead: false, exits: [] };
   current = c;
+  const t0 = Date.now();
   return new Promise(resolve => {
-    const quit = () => { c.dead = true; stop(); c.exits.forEach(f => f()); resolve(null); };
+    const quit = () => {
+      c.dead = true; stop(); c.exits.forEach(f => f());
+      if (!title) S.logQuit(skill, Date.now() - t0);
+      resolve(null);
+    };
     $('[data-exit]', app).onclick = quit;
     const ctx = {
       root: $('.act-body', app), level: lvl, profile: p, choose,
       alive: () => !c.dead && current === c, onExit: f => c.exits.push(f),
     };
-    const t0 = Date.now();
-    ACTS[skill].run(ctx).then(res => {
+    const start = getPassage
+      ? getPassage(ctx).then(passage => { if (!passage || !ctx.alive()) return null; ctx.passage = passage; return ACTS[skill].run(ctx); })
+      : ACTS[skill].run(ctx);
+    start.then(res => {
       if (!ctx.alive()) return;
       c.dead = true;
       resolve(res ? { ...res, ms: Date.now() - t0 } : null);
@@ -289,7 +333,7 @@ async function routine() {
   finale();
 }
 
-function finale() {
+async function finale() {
   const p = S.profile();
   app.innerHTML = `
     <div class="page result">
@@ -297,12 +341,24 @@ function finale() {
       <h1>Routine complete!</h1>
       <p class="lead">You showed up and worked hard, ${esc(p.name)}. That's what champions do.</p>
       <p class="stat">🔥 ${S.streak(p)}-day streak · ⭐ ${p.stars} spirit points</p>
+      <div class="mood-ask">
+        <p class="prompt">How did practice feel today?</p>
+        <div class="row">${[['great', '😄', 'Great'], ['good', '🙂', 'Good'], ['okay', '😐', 'Okay'], ['hard', '😣', 'Hard']].map(([k, e, t]) => `<button class="mood-btn" data-mood="${k}"><span>${e}</span>${t}</button>`).join('')}</div>
+      </div>
       <button class="btn primary big" data-home>Home</button>
     </div>`;
   confetti(80);
   sfx('up');
-  say(`Routine complete! You worked hard, ${p.name}. That's what champions do!`);
-  waitClick(app, '[data-home]').then(home);
+  await say(`Routine complete! You worked hard, ${p.name}. How did practice feel today?`);
+  const b = await waitClick(app, '[data-mood], [data-home]');
+  if (b.dataset.mood) {
+    S.addMood(b.dataset.mood);
+    const reply = { great: 'Woo-hoo! Love that!', good: 'Nice work today!', okay: 'Thanks for telling me. Every practice counts.', hard: 'Thanks for telling me. Hard days make you stronger. I’m proud of you for finishing!' }[b.dataset.mood];
+    $('.mood-ask', app).innerHTML = `<p class="prompt">${esc(reply)}</p>`;
+    await say(reply);
+    await waitClick(app, '[data-home]');
+  }
+  home();
 }
 
 // ---------- Start ----------

@@ -1,6 +1,6 @@
 // Mirror Twins — find every target among its look-alike twins.
 import { TWIN_LEVELS, CHEER_MOVES, LETTER_NAMES } from './data.js';
-import { say, stop, sfx } from './speech.js';
+import { say, stop, sfx, getClip, playVideoBubble } from './speech.js';
 import { esc, shuffle, sample, waitClick, wiggle, sleep, PRAISE } from './ui.js';
 import { noteError } from './store.js';
 
@@ -45,7 +45,14 @@ export async function run(ctx) {
           <button class="btn primary" data-go>Got it!</button>
         </div>`;
       const lines = [x, y].map(c => CHEER_MOVES[c]).filter(Boolean).join(' ');
-      say(lines + (extra ? ' ' + extra : ''));
+      const video = await getClip(`video:move:${pairKey}`);
+      if (video) {
+        root.querySelector('[data-go]').insertAdjacentHTML('beforebegin', '<button class="btn" data-watch>🎥 Watch the cheer move</button>');
+        root.querySelector('[data-watch]').onclick = () => playVideoBubble(video, { big: true });
+        playVideoBubble(video, { big: true });
+      } else {
+        say(lines + (extra ? ' ' + extra : ''));
+      }
       await waitClick(root, '[data-go]');
       stop();
       if (!ctx.alive()) return null;

@@ -1,9 +1,10 @@
 // Offline support: try the network first, fall back to the saved copy.
-const CACHE = 'soundsquad-v1';
+const CACHE = 'soundsquad-v2';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'icon.svg', 'manifest.webmanifest',
-  'js/app.js', 'js/data.js', 'js/store.js', 'js/speech.js', 'js/ui.js', 'js/coach.js',
+  'js/app.js', 'js/data.js', 'js/store.js', 'js/speech.js', 'js/ui.js', 'js/coach.js', 'js/checkpoint.js', 'js/read-anything.js',
   'js/act-ran.js', 'js/act-letters.js', 'js/act-phon.js', 'js/act-spell.js', 'js/act-memory.js', 'js/act-read.js',
+  'js/act-decode.js', 'js/act-write.js', 'js/act-math.js',
 ];
 
 self.addEventListener('install', e => {

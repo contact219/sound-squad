@@ -2,7 +2,7 @@
 import { SPELL_LEVELS, LOOKALIKE, parseWord, spellOut } from './data.js';
 import { say, sayTile, stop, sfx } from './speech.js';
 import { esc, pick, sample, shuffle, waitClick, wiggle, sleep, PRAISE, ENCOURAGE } from './ui.js';
-import { noteError, comebackMiss, comebackHit } from './store.js';
+import { noteError, comebackMiss, comebackHit, soundStat, focusSounds } from './store.js';
 
 const COUNT = 5;
 
@@ -20,7 +20,19 @@ function distractors(word, n) {
 export async function run(ctx) {
   const { root, level, profile } = ctx;
   const comeback = Object.keys(profile.comeback || {}).slice(0, 2).map(parseWord);
-  const fresh = sample(SPELL_LEVELS[level - 1].words.filter(w => !comeback.some(c => c.word === w.word)), COUNT - comeback.length);
+  const custom = profile.settings.useCustomWords ? (profile.customWords || []).map(parseWord) : [];
+  const notComeback = w => !comeback.some(c => c.word === w.word);
+  let fresh;
+  if (custom.length) {
+    fresh = sample(custom.filter(notComeback), COUNT - comeback.length);
+  } else {
+    // Mix in up to 2 words with sounds the grown-up is watching or that are often missed.
+    const focus = new Set(focusSounds(profile));
+    const known = SPELL_LEVELS.slice(0, level).flatMap(l => l.words).filter(notComeback);
+    const focusWords = sample(known.filter(w => w.tiles.some(t => focus.has(t.key))), 2);
+    const rest = SPELL_LEVELS[level - 1].words.filter(w => notComeback(w) && !focusWords.some(f => f.word === w.word));
+    fresh = [...focusWords, ...sample(rest, COUNT - comeback.length - focusWords.length)];
+  }
   const words = shuffle([...comeback, ...fresh]);
   const extra = level <= 2 ? 2 : 3;
   let correct = 0;
@@ -44,6 +56,7 @@ export async function run(ctx) {
 
     let next = 0;
     let misses = 0;
+    let tileMissed = false;
     while (next < w.tiles.length) {
       const el = await waitClick(root, '.tile:not(.used)');
       if (!ctx.alive()) return null;
@@ -55,11 +68,14 @@ export async function run(ctx) {
         slot.textContent = t.label;
         slot.classList.add('filled', 'pop');
         if (need.silent) slot.classList.add('silent');
+        if (!need.silent) soundStat(need.key, !tileMissed);
+        tileMissed = false;
         next++;
         sfx('tap');
         await sayTile(need);
       } else {
         misses++;
+        tileMissed = true;
         wiggle(el);
         sfx('soft');
         noteError('spell', `${need.key}>${t.label}`);
