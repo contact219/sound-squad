@@ -67,8 +67,8 @@ export const sounding = w => w.tiles.filter(t => !t.silent);
 
 export const SPELL_LEVELS = [
   { name: 'Short vowels', words: 'c-a-t s-u-n h-o-p b-e-d p-i-g m-u-d j-a-m w-e-t l-i-d r-u-g d-o-g t-a-p y-e-s b-u-g p-o-t n-e-t d-i-g g-u-m m-o-p f-i-n' },
-  { name: 'sh, ch, th, ck', words: 'sh-i-p ch-o-p th-i-n d-u-ck f-i-sh ch-i-n b-a-th s-o-ck sh-u-t r-i-ch m-o-th b-a-ck sh-e-d ch-e-ck p-a-th l-o-ck' },
-  { name: 'Blends', words: 's-t-o-p f-l-a-g c-r-a-b f-r-o-g s-w-i-m p-l-a-n d-r-u-m s-l-e-d c-l-a-p g-r-i-n t-r-i-p b-e-n-d j-u-m-p h-a-n-d s-p-o-t m-i-l-k s-p-i-n k-i-ck' },
+  { name: 'sh, ch, th, ck', words: 'sh-i-p ch-o-p th-i-n d-u-ck f-i-sh ch-i-n b-a-th s-o-ck sh-u-t r-i-ch m-o-th b-a-ck sh-e-d ch-e-ck p-a-th l-o-ck qu-i-ck qu-a-ck' },
+  { name: 'Blends', words: 's-t-o-p f-l-a-g c-r-a-b f-r-o-g s-w-i-m p-l-a-n d-r-u-m s-l-e-d c-l-a-p g-r-i-n t-r-i-p b-e-n-d j-u-m-p h-a-n-d s-p-o-t m-i-l-k s-p-i-n k-i-ck qu-i-l-t qu-e-s-t s-qu-i-d' },
   { name: 'Magic e', words: 'c-a-k-e* b-i-k-e* h-o-p-e* c-u-t-e* h-o-m-e* r-o-p-e* k-i-t-e* t-a-p-e* n-o-s-e* sh-i-n-e* g-r-a-p-e* s-m-i-l-e* s-t-o-n-e* f-l-u-t-e* b-o-n-e* n-o-t-e*' },
   { name: 'Vowel teams', words: 'r-ai-n p-l-ay s-ee-d t-ea-m b-oa-t s-n-ow(oh) m-ai-l d-ay f-ee-t r-ea-d g-oa-t b-l-ow(oh) t-r-ai-n s-t-ay s-l-ee-p b-ea-ch' },
   { name: 'Bossy r', words: 'c-ar f-or-k h-er b-ir-d t-ur-n s-t-ar c-or-n f-er-n g-ir-l b-ur-n ch-ar-t sh-or-t sh-ir-t p-ar-k ch-eer' },
@@ -298,7 +298,7 @@ export function chunkPhrases(text) {
 
 // All sounds, grouped (for the voice recorder and the sound map).
 export const SOUND_GROUPS = [
-  ['Short vowels', 'a e i o u'], ['Long vowels (magic e)', 'A I O U'], ['Consonants', 'b c d f g h j k l m n p r s t v w y z'],
+  ['Short vowels', 'a e i o u'], ['Long vowels (magic e)', 'A I O U'], ['Consonants', 'b c d f g h j k l m n p qu r s t v w x y z'],
   ['Sound teams', 'sh ch th ck ng'], ['Vowel teams', 'ai ay ee ea oa ow(oh) ow ou oi oy oo oo(u)'],
   ['Bossy r', 'ar or er ir ur eer'], ['Tricky sounds', 'g(j) c(s) y(ee) ed(d) ed(t) ing'],
 ].map(([name, keys]) => ({ name, keys: keys.split(' ') }));

@@ -61,8 +61,9 @@ export async function checkpoint(app, { onDone }) {
     if (i === 0) say('What sound does this make?');
     const b = await waitClick(body, '[data-yes], [data-no]');
     const ok = b.dataset.yes !== undefined;
-    if (!ok) soundMiss.push(k);
-    S.soundStat(k, ok, p);
+    const sk = k === 'q' ? 'qu' : k; // the sound map calls q "qu"
+    if (!ok) soundMiss.push(sk);
+    S.soundStat(sk, ok, p);
   }
   if (!alive()) return;
   const sounds = { correct: CHECKPOINT.sounds.length - soundMiss.length, total: CHECKPOINT.sounds.length, missed: soundMiss };
