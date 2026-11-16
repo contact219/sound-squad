@@ -266,6 +266,16 @@ legend { font-weight: 600; margin-bottom: 6px; }
 .rec-btns { display: flex; gap: 6px; }
 .rec-btn.on { background: var(--squad); color: #fff; border-color: var(--squad); }
 
+/* Daily goal and routine progress */
+.hero-main { flex: 1; min-width: 260px; }
+.hero-actions { display: grid; gap: 8px; justify-items: center; }
+.chip.done { opacity: .7; text-decoration: line-through; text-decoration-thickness: 2px; }
+.goal-today { margin-top: 14px; background: #fff8e1; border-radius: 14px; padding: 10px 14px; max-width: 520px; }
+.goal-today .bar-track { margin: 6px 0; }
+.goal-today.met { background: #e6f7ee; }
+.goal-today.met .bar-fill { background: var(--good); }
+.goal-met { font-size: 1.3rem; font-weight: 800; color: var(--good); }
+
 /* ---------- Shared helpers ---------- */
 .check { display: inline-flex; gap: 8px; align-items: center; }
 .check input { width: 22px; height: 22px; }

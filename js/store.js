@@ -64,6 +64,7 @@ export const SKILL_INFO = {
 export const DEFAULT_SETTINGS = {
   font: 'Lexend', size: 26, spacing: 0.06, lineHeight: 1.7, tint: 'cream', rate: 0.85, voiceURI: '',
   routine: 'regular', breaks: true, mic: false, sfx: true, recordReading: false, useCustomWords: false,
+  dailyGoal: 'routine',
 };
 
 const blank = () => ({ profiles: [], activeId: null });
@@ -78,6 +79,8 @@ function ensure(p) {
   const objs = ['recent', 'errors', 'comeback', 'best', 'memSpan', 'readHistory', 'soundStats'];
   for (const o of objs) if (!p[o] || typeof p[o] !== 'object') p[o] = {};
   if (typeof p.stars !== 'number') p.stars = 0;
+  // Goal days started with this update; earlier practice days count so streaks aren't lost.
+  if (!Array.isArray(p.goalDays)) p.goalDays = [...p.days];
   return p;
 }
 
@@ -122,8 +125,91 @@ export const today = (t = Date.now()) => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
+// ---------- Daily routine, resume, and daily goal ----------
+
+// A three-day rotation so every skill gets practice, with sound work and reading every day.
+// It moves on with each day practiced (not calendar days), so skipped days don't skip activities.
+export function routinePlan(p) {
+  const d = p.days.filter(x => x !== today()).length % 3;
+  const regular = [
+    ['ran', 'phon', 'break', 'spell', 'letters', 'break', 'fluency'],
+    ['phon', 'decode', 'break', 'spell', 'memory', 'break', 'fluency'],
+    ['ran', 'phon', 'break', 'write', 'math', 'break', 'fluency'],
+  ][d];
+  const short = [['phon', 'spell', 'break', 'fluency'], ['phon', 'decode', 'break', 'fluency'], ['phon', 'write', 'break', 'fluency']][d];
+  let plan = p.settings.routine === 'short' ? short : regular;
+  if (!p.settings.breaks) plan = plan.filter(s => s !== 'break');
+  return plan;
+}
+
+// Today's routine and which steps (by index) are finished.
+export function routineProgress(p = profile()) {
+  const plan = routinePlan(p);
+  let g = p.routineProgress;
+  if (!g || g.date !== today() || g.plan.join() !== plan.join()) {
+    // Keep finished activities if only the plan's shape changed today (e.g. breaks turned off).
+    const carried = g && g.date === today() ? g.plan.filter((s, j) => s !== 'break' && g.done.includes(j)) : [];
+    g = p.routineProgress = { date: today(), plan, done: [], complete: false };
+    for (const s of carried) { const i = plan.findIndex((x, j) => x === s && !g.done.includes(j)); if (i >= 0) g.done.push(i); }
+    save();
+  }
+  return g;
+}
+const stepsLeft = g => g.plan.filter((s, j) => s !== 'break' && !g.done.includes(j)).length;
+
+export function markStep(p, i) {
+  const g = routineProgress(p);
+  if (!g.done.includes(i)) g.done.push(i);
+  if (stepsLeft(g) === 0) g.complete = true;
+  save();
+}
+// An activity played from its tile counts toward today's routine if it's on the plan.
+export function markSkill(p, skill) {
+  const g = routineProgress(p);
+  const i = g.plan.findIndex((s, j) => s === skill && !g.done.includes(j));
+  if (i >= 0) markStep(p, i);
+}
+export function restartRoutine(p) {
+  const g = routineProgress(p);
+  g.done = [];
+  g.complete = false;
+  save();
+}
+
+export const DAILY_GOALS = {
+  routine: 'Finish today’s routine', min10: 'Practice 10 minutes', min15: 'Practice 15 minutes', any: 'Do any practice',
+};
+
+export function goalStatus(p = profile()) {
+  const t = today();
+  const kind = p.settings.dailyGoal || 'routine';
+  const already = p.goalDays.includes(t);
+  if (kind === 'routine') {
+    const g = routineProgress(p);
+    const total = g.plan.filter(s => s !== 'break').length;
+    const done = total - stepsLeft(g);
+    return { kind, done, total, frac: done / total, met: already || done >= total, text: `${done} of ${total} activities` };
+  }
+  if (kind === 'any') {
+    const met = already || p.days.includes(t);
+    return { kind, done: met ? 1 : 0, total: 1, frac: met ? 1 : 0, met, text: met ? 'done!' : 'not yet' };
+  }
+  const target = kind === 'min15' ? 15 : 10;
+  const mins = p.sessions.filter(s => today(s.t) === t).reduce((n, s) => n + (s.ms || 0), 0) / 60000;
+  return { kind, done: Math.floor(mins), total: target, frac: Math.min(1, mins / target), met: already || mins >= target, text: `${Math.floor(mins)} of ${target} minutes` };
+}
+
+// Returns true the moment today's goal is first met.
+export function checkGoal(p = profile()) {
+  if (p.goalDays.includes(today()) || !goalStatus(p).met) return false;
+  p.goalDays.push(today());
+  save();
+  return true;
+}
+
+// Streak = days in a row the daily goal was met.
 export function streak(p = profile()) {
-  const days = new Set(p.days);
+  const days = new Set(p.goalDays);
   let n = 0;
   const d = new Date();
   if (!days.has(today(d))) d.setDate(d.getDate() - 1); // today not done yet: count from yesterday

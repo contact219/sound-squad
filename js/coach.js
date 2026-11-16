@@ -101,7 +101,8 @@ function progress(body, p, app, opts) {
       <div class="stat-card"><b>${p.days.length}</b><span>days practiced</span></div>
       <div class="stat-card"><b>${daysWeek}</b><span>days this week</span></div>
       <div class="stat-card"><b>${minutes}</b><span>minutes total</span></div>
-      <div class="stat-card"><b>${S.streak(p)}</b><span>day streak</span></div>
+      <div class="stat-card"><b>${S.streak(p)}</b><span>day goal streak</span></div>
+      <div class="stat-card"><b>${p.goalDays.filter(d => new Date(d + 'T12:00:00').getTime() >= weekAgo).length}</b><span>goal met, last 7 days</span></div>
       <div class="stat-card"><b>${p.sessions.length}</b><span>activities done</span></div>
     </div>
     <p class="muted small">Aim for short, frequent practice: 10–15 minutes, 4–5 days a week, beats one long session.</p>
@@ -202,13 +203,14 @@ function weeklyData(p) {
   const sentences = p.journal.filter(j => j.t >= wk);
   const recs = p.readings.filter(r => r.t >= wk);
   const goalsTxt = p.goals.map(g => `${g.text}: ${measureNow(p, g.measure) ?? (g.done ? 'done' : '—')} / ${g.target ?? ''}`);
-  return { days, mins, rows, errs, moods, sentences, recs, goalsTxt, from: wk, to: now };
+  const goalDays = p.goalDays.filter(d => new Date(d + 'T12:00:00').getTime() >= wk).length;
+  return { days, goalDays, mins, rows, errs, moods, sentences, recs, goalsTxt, from: wk, to: now };
 }
 
 function weeklyText(p, w) {
   const lines = [
     `Sound Squad weekly summary for ${p.name} (${fmtDate(w.from)} – ${fmtDate(w.to)})`,
-    `Practiced ${w.days} day${w.days === 1 ? '' : 's'}, ${w.mins} minutes.`,
+    `Practiced ${w.days} day${w.days === 1 ? '' : 's'}, ${w.mins} minutes. Daily goal (${S.DAILY_GOALS[p.settings.dailyGoal]}) met on ${w.goalDays} day${w.goalDays === 1 ? '' : 's'}.`,
     ...w.rows.map(r => `• ${SKILL_INFO[r.k].title} (level ${r.level}): ${r.n}×${r.acc != null ? `, ${r.acc}% first try${r.accPrev != null ? ` (last week ${r.accPrev}%)` : ''}` : ''}${r.metric != null ? `, best ${r.metric} ${SERIES_LABEL[r.k] || ''}` : ''}`),
     Object.keys(w.errs).length ? `Working on: ${Object.keys(w.errs).map(explainError).join('; ')}.` : '',
     w.sentences.length ? `Sentences written: ${w.sentences.map(s => `"${s.text}"`).join(' ')}` : '',
@@ -226,7 +228,7 @@ function weekly(body, p, app, opts) {
     <div class="row left"><button class="btn" data-back>← Back</button><button class="btn primary" data-share>📤 Share / email</button><button class="btn" data-copy>📋 Copy text</button><button class="btn" data-printw>🖨️ Print</button></div>
     <article class="card weekly">
       <h2>Week of ${esc(fmtDate(w.from))} – ${esc(fmtDate(w.to))}</h2>
-      <p><b>${w.days}</b> practice days · <b>${w.mins}</b> minutes ${w.moods ? `· felt: ${w.moods}` : ''}</p>
+      <p><b>${w.days}</b> practice days · daily goal met <b>${w.goalDays}</b> day${w.goalDays === 1 ? '' : 's'} · <b>${w.mins}</b> minutes ${w.moods ? `· felt: ${w.moods}` : ''}</p>
       <table class="mini"><thead><tr><th>Activity</th><th>Level</th><th>Times</th><th>First-try %</th><th>Last week</th><th>Best score</th></tr></thead><tbody>
         ${w.rows.map(r => `<tr><td>${SKILL_INFO[r.k].emoji} ${esc(SKILL_INFO[r.k].title)}</td><td>${r.level}</td><td>${r.n}</td><td>${r.acc ?? '—'}</td><td>${r.accPrev ?? '—'}</td><td>${r.metric ?? '—'}</td></tr>`).join('') || '<tr><td colspan="6" class="muted">No practice this week.</td></tr>'}
       </tbody></table>
@@ -624,6 +626,9 @@ function settings(body, p, app, opts) {
         <button class="btn" data-test>🔊 Test voice</button>
         <label>Daily routine
           <select data-k="routine"><option value="regular" ${s.routine === 'regular' ? 'selected' : ''}>Regular (5 activities, ~12 min)</option><option value="short" ${s.routine === 'short' ? 'selected' : ''}>Short (3 activities, ~7 min)</option></select></label>
+        <label>Daily goal (keeps the 🔥 streak going)
+          <select data-k="dailyGoal">${Object.entries(S.DAILY_GOALS).map(([k, t]) => `<option value="${k}" ${s.dailyGoal === k ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select></label>
+        <p class="small muted">The streak counts days in a row the goal is met. If a routine is stopped partway, it picks up where it left off next time.</p>
         <label class="check"><input type="checkbox" data-k="breaks" ${s.breaks ? 'checked' : ''}> Stunt breaks (movement between activities)</label>
         <label class="check"><input type="checkbox" data-k="sfx" ${s.sfx ? 'checked' : ''}> Sound effects</label>
         <label class="check"><input type="checkbox" data-k="recordReading" ${s.recordReading ? 'checked' : ''}> Save a recording each time a story is read solo (Read it myself)</label>

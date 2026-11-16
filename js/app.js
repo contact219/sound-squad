@@ -83,7 +83,7 @@ function maxStreak(days) {
 }
 
 function badges(p) {
-  const ms = maxStreak(p.days);
+  const ms = maxStreak(p.goalDays);
   const reads = Object.values(p.readHistory || {}).reduce((n, h) => n + h.length, 0);
   const levelUps = p.sessions.length && SKILLS.some(k => p.levels[k] > 1);
   return [
@@ -96,18 +96,14 @@ function badges(p) {
   ];
 }
 
-// A three-day rotation so every skill gets practice, with sound work and reading every day.
-function routinePlan(p) {
-  const d = p.days.filter(x => x !== S.today()).length % 3;
-  const regular = [
-    ['ran', 'phon', 'break', 'spell', 'letters', 'break', 'fluency'],
-    ['phon', 'decode', 'break', 'spell', 'memory', 'break', 'fluency'],
-    ['ran', 'phon', 'break', 'write', 'math', 'break', 'fluency'],
-  ][d];
-  const short = [['phon', 'spell', 'break', 'fluency'], ['phon', 'decode', 'break', 'fluency'], ['phon', 'write', 'break', 'fluency']][d];
-  let plan = p.settings.routine === 'short' ? short : regular;
-  if (!p.settings.breaks) plan = plan.filter(s => s !== 'break');
-  return plan;
+function goalCard(p) {
+  const g = S.goalStatus(p);
+  return `
+    <div class="goal-today ${g.met ? 'met' : ''}">
+      <div class="goal-head"><b>🎯 Today’s goal:</b> ${esc(S.DAILY_GOALS[g.kind])}</div>
+      <div class="bar-track"><div class="bar-fill" style="width:${Math.round(g.frac * 100)}%"></div></div>
+      <div class="small">${g.met ? '<b>Goal met! 🎉</b> Your streak is safe.' : esc(g.text)}</div>
+    </div>`;
 }
 
 export function home() {
@@ -115,14 +111,23 @@ export function home() {
   applySettings();
   const p = S.profile();
   if (!p) return setup();
-  const doneToday = p.days.includes(S.today());
-  const plan = routinePlan(p);
+  const prog = S.routineProgress(p);
+  const plan = prog.plan;
+  const steps = plan.filter(s => s !== 'break').length;
+  const doneSteps = plan.filter((s, j) => s !== 'break' && prog.done.includes(j)).length;
+  const state = prog.complete ? 'done' : doneSteps ? 'partway' : 'new';
   const st = S.streak(p);
+  const heading = { new: 'Today’s routine', partway: 'Keep going — you’re partway there!', done: 'You finished today’s routine! 🎉' }[state];
+  const sub = {
+    new: 'About 10 minutes. Short, fun, and you’ll move!',
+    partway: `${doneSteps} of ${steps} done. Pick up right where you left off.`,
+    done: 'Want to go again, or pick one below?',
+  }[state];
   app.innerHTML = `
     <div class="page home">
       <header class="topbar">
         <div class="me"><span class="avatar" style="background:${p.color}">${esc(p.name[0]?.toUpperCase())}</span>
-          <div><h1>Hi, ${esc(p.name)}!</h1><p class="muted">${st ? `🔥 ${st}-day streak · ` : ''}⭐ ${p.stars} spirit points</p></div></div>
+          <div><h1>Hi, ${esc(p.name)}!</h1><p class="muted">${st ? `🔥 ${st}-day goal streak · ` : ''}⭐ ${p.stars} spirit points</p></div></div>
         <div class="top-actions">
           ${S.all().profiles.length > 1 ? '<button class="btn small" data-switch>👥 Switch</button>' : ''}
           <button class="btn small hold" data-coach title="Press and hold">📋 Grown-ups <span>(hold)</span></button>
@@ -130,12 +135,16 @@ export function home() {
       </header>
 
       <section class="card hero">
-        <div>
-          <h2>${doneToday ? 'You practiced today! 🎉' : 'Today’s routine'}</h2>
-          <p class="muted">${doneToday ? 'Want to go again, or pick one below?' : 'About 10 minutes. Short, fun, and you’ll move!'}</p>
-          <div class="plan">${plan.map(s => s === 'break' ? '<span class="chip">🤸 break</span>' : `<span class="chip" style="--c:${SKILL_INFO[s].color}">${SKILL_INFO[s].emoji} ${esc(SKILL_INFO[s].title)}</span>`).join('')}</div>
+        <div class="hero-main">
+          <h2>${heading}</h2>
+          <p class="muted">${sub}</p>
+          <div class="plan">${plan.map((s, j) => s === 'break' ? '<span class="chip">🤸 break</span>' : `<span class="chip ${prog.done.includes(j) ? 'done' : ''}" style="--c:${SKILL_INFO[s].color}">${prog.done.includes(j) ? '✅' : SKILL_INFO[s].emoji} ${esc(SKILL_INFO[s].title)}</span>`).join('')}</div>
+          ${goalCard(p)}
         </div>
-        <button class="btn primary big" data-routine>${doneToday ? 'Go again' : 'Let’s go!'} ▶</button>
+        <div class="hero-actions">
+          <button class="btn primary big" data-routine>${{ new: 'Let’s go!', partway: 'Keep going', done: 'Go again' }[state]} ▶</button>
+          ${state === 'partway' ? '<button class="btn small" data-restart>Start over</button>' : ''}
+        </div>
       </section>
 
       ${checkpointDue(p) ? `<section class="card banner">
@@ -164,7 +173,11 @@ export function home() {
       </section>
     </div>`;
 
-  $('[data-routine]', app).onclick = routine;
+  $('[data-routine]', app).onclick = () => {
+    if (state === 'done') S.restartRoutine(p); // "Go again" runs a fresh round
+    routine();
+  };
+  $('[data-restart]', app)?.addEventListener('click', () => { S.restartRoutine(p); routine(); });
   app.querySelectorAll('[data-act]').forEach(b => { b.onclick = () => freePlay(b.dataset.act); });
   $('[data-switch]', app)?.addEventListener('click', switchProfile);
   $('[data-checkpoint]', app)?.addEventListener('click', () => checkpoint(app, { onDone: home }));
@@ -182,7 +195,7 @@ function openCoach() {
 async function readAnything() {
   const res = await runActivity('fluency', { title: '📷 Read Anything', getPassage: getPage });
   if (!res) return home();
-  if (res.metric != null) S.recordSession('fluency', res);
+  if (res.metric != null) { S.recordSession('fluency', res); S.checkGoal(); }
   home();
 }
 
@@ -251,7 +264,7 @@ function runActivity(skill, { step, total, choose, title, getPassage } = {}) {
   });
 }
 
-function resultScreen(skill, res, rec, { routine: inRoutine, last } = {}) {
+function resultScreen(skill, res, rec, { routine: inRoutine, last, goalMet } = {}) {
   const info = SKILL_INFO[skill];
   const p = S.profile();
   const lines = [];
@@ -271,15 +284,16 @@ function resultScreen(skill, res, rec, { routine: inRoutine, last } = {}) {
       ${lines.map(l => `<p class="stat">${esc(l)}</p>`).join('')}
       <p class="stars">+${Math.max(1, res.correct)} ⭐</p>
       ${levelMsg}
+      ${goalMet ? `<p class="goal-met">🎯 Daily goal met! 🔥 ${S.streak(p)}-day streak</p>` : ''}
       <div class="row">
         ${inRoutine
           ? `<button class="btn" data-home>Stop here</button><button class="btn primary big" data-next>${last ? 'Finish!' : 'Next ▶'}</button>`
           : `<button class="btn" data-home>Home</button><button class="btn primary big" data-again>Again</button>`}
       </div>
     </div>`;
-  sfx(rec.change > 0 ? 'up' : 'clap');
-  if (rec.change > 0 || res.details?.personalBest) confetti();
-  say(`${info.title} done! ${rec.change > 0 ? 'Level up!' : ''}`);
+  sfx(rec.change > 0 || goalMet ? 'up' : 'clap');
+  if (rec.change > 0 || res.details?.personalBest || goalMet) confetti();
+  say(`${info.title} done! ${rec.change > 0 ? 'Level up!' : ''} ${goalMet ? 'You met your daily goal!' : ''}`);
   return waitClick(app, 'button').then(b => b.dataset.home === undefined);
 }
 
@@ -288,7 +302,9 @@ async function freePlay(skill) {
     const res = await runActivity(skill, { choose: skill === 'fluency' });
     if (!res) return home();
     const rec = S.recordSession(skill, res);
-    if (!(await resultScreen(skill, res, rec))) return home();
+    S.markSkill(S.profile(), skill); // counts toward today's routine if it's on the plan
+    const goalMet = S.checkGoal();
+    if (!(await resultScreen(skill, res, rec, { goalMet }))) return home();
   }
 }
 
@@ -317,18 +333,30 @@ async function stuntBreak() {
   return true;
 }
 
+// Runs today's routine, skipping anything already finished, so stopping partway picks up where she left off.
 async function routine() {
   const p = S.profile();
-  const plan = routinePlan(p);
-  const steps = plan.filter(s => s !== 'break');
-  let n = 0;
-  for (let i = 0; i < plan.length; i++) {
-    if (plan[i] === 'break') { if (!(await stuntBreak())) return home(); continue; }
-    n++;
-    const res = await runActivity(plan[i], { step: n, total: steps.length });
+  const prog = S.routineProgress(p);
+  const plan = prog.plan;
+  const total = plan.filter(s => s !== 'break').length;
+  const todo = j => plan[j] !== 'break' && !prog.done.includes(j);
+  const first = plan.findIndex((_, j) => todo(j));
+  if (first < 0) return finale();
+  for (let i = first; i < plan.length; i++) {
+    if (plan[i] === 'break') {
+      if (!plan.slice(i + 1).some((_, k) => todo(i + 1 + k))) continue; // nothing left after this break
+      if (!(await stuntBreak())) return home();
+      continue;
+    }
+    if (!todo(i)) continue;
+    const step = plan.slice(0, i + 1).filter(s => s !== 'break').length;
+    const res = await runActivity(plan[i], { step, total });
     if (!res) return home();
     const rec = S.recordSession(plan[i], res);
-    if (!(await resultScreen(plan[i], res, rec, { routine: true, last: n === steps.length }))) return home();
+    S.markStep(p, i);
+    const goalMet = S.checkGoal(p);
+    const last = !plan.some((_, j) => todo(j));
+    if (!(await resultScreen(plan[i], res, rec, { routine: true, last, goalMet }))) return home();
   }
   finale();
 }
@@ -340,7 +368,7 @@ async function finale() {
       <div class="big-emoji">🏆</div>
       <h1>Routine complete!</h1>
       <p class="lead">You showed up and worked hard, ${esc(p.name)}. That's what champions do.</p>
-      <p class="stat">🔥 ${S.streak(p)}-day streak · ⭐ ${p.stars} spirit points</p>
+      <p class="stat">${S.goalStatus(p).met ? `🎯 Daily goal met · 🔥 ${S.streak(p)}-day goal streak` : `🎯 ${esc(S.goalStatus(p).text)}`} · ⭐ ${p.stars} spirit points</p>
       <div class="mood-ask">
         <p class="prompt">How did practice feel today?</p>
         <div class="row">${[['great', '😄', 'Great'], ['good', '🙂', 'Good'], ['okay', '😐', 'Okay'], ['hard', '😣', 'Hard']].map(([k, e, t]) => `<button class="mood-btn" data-mood="${k}"><span>${e}</span>${t}</button>`).join('')}</div>

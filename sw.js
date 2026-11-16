@@ -1,5 +1,5 @@
 // Offline support: try the network first, fall back to the saved copy.
-const CACHE = 'soundsquad-v2';
+const CACHE = 'soundsquad-v3';
 const SHELL = [
   './', 'index.html', 'css/app.css', 'icon.svg', 'manifest.webmanifest',
   'js/app.js', 'js/data.js', 'js/store.js', 'js/speech.js', 'js/ui.js', 'js/coach.js', 'js/checkpoint.js', 'js/read-anything.js',
