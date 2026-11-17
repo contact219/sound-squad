@@ -2,7 +2,7 @@ import * as S from './store.js';
 import { SKILLS, SKILL_INFO } from './store.js';
 import { LEVEL_NAME, LEVEL_COUNTS, STUNT_BREAKS } from './data.js';
 import { say, stop, sfx, configure } from './speech.js';
-import { $, esc, pick, sleep, confetti, waitClick, PRAISE } from './ui.js';
+import { $, esc, pick, sleep, confetti, waitClick, toast, PRAISE } from './ui.js';
 import * as ran from './act-ran.js';
 import * as letters from './act-letters.js';
 import * as phon from './act-phon.js';
@@ -110,7 +110,7 @@ export function home() {
   stop();
   applySettings();
   const p = S.profile();
-  if (!p) return setup();
+  if (!p) return S.all().profiles.length ? whoScreen() : setup();
   const prog = S.routineProgress(p);
   const plan = prog.plan;
   const steps = plan.filter(s => s !== 'break').length;
@@ -129,7 +129,7 @@ export function home() {
         <div class="me"><span class="avatar" style="background:${p.color}">${esc(p.name[0]?.toUpperCase())}</span>
           <div><h1>Hi, ${esc(p.name)}!</h1><p class="muted">${st ? `🔥 ${st}-day goal streak · ` : ''}⭐ ${p.stars} spirit points</p></div></div>
         <div class="top-actions">
-          ${S.all().profiles.length > 1 ? '<button class="btn small" data-switch>👥 Switch</button>' : ''}
+          <button class="btn small" data-signout>🚪 Sign out</button>
           <button class="btn small hold" data-coach title="Press and hold">📋 Grown-ups <span>(hold)</span></button>
         </div>
       </header>
@@ -179,7 +179,7 @@ export function home() {
   };
   $('[data-restart]', app)?.addEventListener('click', () => { S.restartRoutine(p); routine(); });
   app.querySelectorAll('[data-act]').forEach(b => { b.onclick = () => freePlay(b.dataset.act); });
-  $('[data-switch]', app)?.addEventListener('click', switchProfile);
+  $('[data-signout]', app).onclick = signOut;
   $('[data-checkpoint]', app)?.addEventListener('click', () => checkpoint(app, { onDone: home }));
   $('[data-scan]', app).onclick = readAnything;
   holdButton($('[data-coach]', app), openCoach);
@@ -212,14 +212,28 @@ function holdButton(btn, fn) {
   btn.addEventListener('contextmenu', e => e.preventDefault());
 }
 
-function switchProfile() {
+// Sign out keeps all progress; it just hands the device to the next student.
+function signOut() {
+  const p = S.profile();
+  S.setActive(null);
+  if (p) toast(`See you next time, ${p.name}! 👋`);
+  whoScreen();
+}
+
+function whoScreen() {
+  stop();
+  applySettings();
   const list = S.all().profiles;
   app.innerHTML = `
     <div class="page setup">
+      <div class="logo">📣</div>
       <h1>Who's practicing?</h1>
+      <p class="muted">Tap your name to start.</p>
       <div class="who">${list.map(p => `<button class="who-btn" data-id="${p.id}"><span class="avatar big" style="background:${p.color}">${esc(p.name[0]?.toUpperCase())}</span>${esc(p.name)}</button>`).join('')}</div>
+      <button class="btn small hold who-add" data-add title="Press and hold">➕ New student <span>(grown-up, hold)</span></button>
     </div>`;
-  waitClick(app, '[data-id]').then(b => { S.setActive(b.dataset.id); home(); });
+  app.querySelectorAll('[data-id]').forEach(b => { b.onclick = () => { S.setActive(b.dataset.id); home(); }; });
+  holdButton($('[data-add]', app), () => setup({ first: false }));
 }
 
 // ---------- Running activities ----------
